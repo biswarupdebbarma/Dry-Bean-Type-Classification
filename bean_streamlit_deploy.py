@@ -1,4 +1,4 @@
-import io
+from pathlib import Path
 
 import joblib
 import pandas as pd
@@ -27,12 +27,33 @@ st.set_page_config(page_title="Bean Classifier", page_icon="🫘")
 st.title("Bean Classifier")
 st.write("Enter the bean's physical measurements to predict its class.")
 
-model_file = best_tuned_model.pkl,
-    ,
-)
-transformer_file =transformation_artifacts.pkl,
-    ,
-)
+if submitted:
+    try:
+        if not MODEL_PATH.exists():
+            st.error(f"Model file not found: {MODEL_PATH}")
+        elif not TRANSFORMER_PATH.exists():
+            st.error(f"Transformer file not found: {TRANSFORMER_PATH}")
+        else:
+            model = joblib.load(MODEL_PATH)
+            transformer = joblib.load(TRANSFORMER_PATH)
+
+            measurements = pd.DataFrame([values])
+            measurements = transformer.transform(measurements)
+
+            prediction = model.predict(measurements)[0]
+            st.success(f"Predicted class: **{prediction}**")
+
+            if hasattr(model, "predict_proba"):
+                probabilities = model.predict_proba(measurements)[0]
+                classes = getattr(model, "classes_", range(len(probabilities)))
+                results = pd.DataFrame(
+                    {"Class": classes, "Probability": probabilities}
+                ).sort_values("Probability", ascending=False)
+                st.subheader("Class probabilities")
+                st.dataframe(results, hide_index=True)
+
+    except Exception as error:
+        st.error(f"Could not load the model or make a prediction: {error}")
 
 with st.form("bean_measurements"):
     values = {}
