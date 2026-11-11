@@ -4,6 +4,10 @@ import joblib
 import pandas as pd
 import streamlit as st
 
+APP_DIR = Path(__file__).resolve().parent
+MODEL_PATH = APP_DIR / "best_tuned_model.pkl"
+TRANSFORMER_PATH = APP_DIR / "transformation_artifacts.pkl"
+
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
     "Perimeter": (524.0, 1986.0),
@@ -27,34 +31,6 @@ st.set_page_config(page_title="Bean Classifier", page_icon="🫘")
 st.title("Bean Classifier")
 st.write("Enter the bean's physical measurements to predict its class.")
 
-if submitted:
-    try:
-        if not MODEL_PATH.exists():
-            st.error(f"Model file not found: {MODEL_PATH}")
-        elif not TRANSFORMER_PATH.exists():
-            st.error(f"Transformer file not found: {TRANSFORMER_PATH}")
-        else:
-            model = joblib.load(MODEL_PATH)
-            transformer = joblib.load(TRANSFORMER_PATH)
-
-            measurements = pd.DataFrame([values])
-            measurements = transformer.transform(measurements)
-
-            prediction = model.predict(measurements)[0]
-            st.success(f"Predicted class: **{prediction}**")
-
-            if hasattr(model, "predict_proba"):
-                probabilities = model.predict_proba(measurements)[0]
-                classes = getattr(model, "classes_", range(len(probabilities)))
-                results = pd.DataFrame(
-                    {"Class": classes, "Probability": probabilities}
-                ).sort_values("Probability", ascending=False)
-                st.subheader("Class probabilities")
-                st.dataframe(results, hide_index=True)
-
-    except Exception as error:
-        st.error(f"Could not load the model or make a prediction: {error}")
-
 with st.form("bean_measurements"):
     values = {}
     columns = st.columns(2)
@@ -72,30 +48,30 @@ with st.form("bean_measurements"):
     submitted = st.form_submit_button("Predict")
 
 if submitted:
-    if model_file is None:
-        st.error("Upload best_tuned_model.pkl to make a prediction.")
-    else:
-        try:
-            model = joblib.load(io.BytesIO(model_file.getvalue()))
-            measurements = pd.DataFrame([values])
+    try:
+        if not MODEL_PATH.exists():
+            st.error(f"Model file not found: {MODEL_PATH}")
+        elif not TRANSFORMER_PATH.exists():
+            st.error(f"Transformer file not found: {TRANSFORMER_PATH}")
+        else:
+            model = joblib.load(MODEL_PATH)
+            transformer = joblib.load(TRANSFORMER_PATH)
 
-            if transformer_file is not None:
-                transformer = joblib.load(
-                    io.BytesIO(transformer_file.getvalue())
-                )
-                measurements = transformer.transform(measurements)
+            measurements = pd.DataFrame([values], columns=FEATURE_BOUNDS.keys())
+            transformed = transformer.transform(measurements)
 
-            prediction = model.predict(measurements)[0]
+            prediction = model.predict(transformed)[0]
             st.success(f"Predicted class: **{prediction}**")
 
             if hasattr(model, "predict_proba"):
-                probabilities = model.predict_proba(measurements)[0]
+                probabilities = model.predict_proba(transformed)[0]
                 classes = getattr(model, "classes_", range(len(probabilities)))
                 results = pd.DataFrame(
                     {"Class": classes, "Probability": probabilities}
                 ).sort_values("Probability", ascending=False)
+
                 st.subheader("Class probabilities")
                 st.dataframe(results, hide_index=True)
 
-        except Exception as error:
-            st.error(f"Could not load the model or make a prediction: {error}")
+    except Exception as error:
+        st.error(f"Could not load the model or make a prediction: {error}")
