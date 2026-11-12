@@ -3,9 +3,12 @@ import joblib
 import pandas as pd
 import streamlit as st
 
-# Load the trained model and scaler
-model = joblib.load('best_tuned_model.pkl')
-transformation_artifacts = joblib.load('transformation_artifacts.pkl')
+MODEL_PATH = (
+    Path(__file__).resolve().parent
+    / "saved_pickle_models"
+    / "streamlit_deployment"
+    / "best_tuned_model.pkl"
+)
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
@@ -48,29 +51,14 @@ with st.form("bean_measurements"):
 
 if submitted:
     try:
-        if not model.exists():
-            st.error(f"Model file not found: {model}")
-        elif not transformation_artifacts.exists():
-            st.error(f"Transformer file not found: {transformation_artifacts}")
+        if not MODEL_PATH.is_file():
+            st.error(f"Model file not found: {MODEL_PATH}")
         else:
-            model = joblib.load(model)
-            transformer = joblib.load(transformation_artifacts)
+            model = joblib.load(MODEL_PATH)
 
             measurements = pd.DataFrame([values], columns=FEATURE_BOUNDS.keys())
-            transformed = transformer.transform(measurements)
-
-            prediction = model.predict(transformed)[0]
+            prediction = model.predict(measurements)[0]
             st.success(f"Predicted class: **{prediction}**")
-
-            if hasattr(model, "predict_proba"):
-                probabilities = model.predict_proba(transformed)[0]
-                classes = getattr(model, "classes_", range(len(probabilities)))
-                results = pd.DataFrame(
-                    {"Class": classes, "Probability": probabilities}
-                ).sort_values("Probability", ascending=False)
-
-                st.subheader("Class probabilities")
-                st.dataframe(results, hide_index=True)
 
     except Exception as error:
         st.error(f"Could not load the model or make a prediction: {error}")
