@@ -5,12 +5,7 @@ import pandas as pd
 import streamlit as st
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = (
-    BASE_DIR
-    / "saved_pickle_models"
-    / "streamlit_deployment"
-    / "best_tuned_model.pkl"
-)
+MODEL_PATH = BASE_DIR / "best_tuned_model.pkl"
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
