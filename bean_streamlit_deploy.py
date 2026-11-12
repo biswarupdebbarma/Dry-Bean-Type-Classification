@@ -4,9 +4,9 @@ import joblib
 import pandas as pd
 import streamlit as st
 
-APP_DIR = Path(__file__).resolve().parent
-MODEL_PATH = APP_DIR / "best_tuned_model.pkl"
-TRANSFORMER_PATH = APP_DIR / "transformation_artifacts.pkl"
+# Load the trained model and scaler
+model = joblib.load('best_tuned_model.pkl')
+scaler = joblib.load('transformation_artifacts.pkl')
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
