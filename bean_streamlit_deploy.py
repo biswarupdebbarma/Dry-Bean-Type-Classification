@@ -1,12 +1,11 @@
 from pathlib import Path
-
 import joblib
 import pandas as pd
 import streamlit as st
 
 # Load the trained model and scaler
 model = joblib.load('best_tuned_model.pkl')
-scaler = joblib.load('transformation_artifacts.pkl')
+transformation_artifacts = joblib.load('transformation_artifacts.pkl')
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
@@ -49,13 +48,13 @@ with st.form("bean_measurements"):
 
 if submitted:
     try:
-        if not MODEL_PATH.exists():
-            st.error(f"Model file not found: {MODEL_PATH}")
-        elif not TRANSFORMER_PATH.exists():
-            st.error(f"Transformer file not found: {TRANSFORMER_PATH}")
+        if not model.exists():
+            st.error(f"Model file not found: {model}")
+        elif not transformation_artifacts.exists():
+            st.error(f"Transformer file not found: {transformation_artifacts}")
         else:
-            model = joblib.load(MODEL_PATH)
-            transformer = joblib.load(TRANSFORMER_PATH)
+            model = joblib.load(model)
+            transformer = joblib.load(transformation_artifacts)
 
             measurements = pd.DataFrame([values], columns=FEATURE_BOUNDS.keys())
             transformed = transformer.transform(measurements)
