@@ -3,12 +3,8 @@ import joblib
 import pandas as pd
 import streamlit as st
 
-MODEL_PATH = (
-    Path(__file__).resolve().parent
-    / "saved_pickle_models"
-    / "streamlit_deployment"
-    / "best_tuned_model.pkl"
-)
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "best_tuned_model.pkl"
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
