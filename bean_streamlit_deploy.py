@@ -1,10 +1,16 @@
 from pathlib import Path
 import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "best_tuned_model.pkl"
+MODEL_PATH = (
+    BASE_DIR
+    / "saved_pickle_models"
+    / "streamlit_deployment"
+    / "best_tuned_model.pkl"
+)
 
 FEATURE_BOUNDS = {
     "Area": (20420.0, 254616.0),
@@ -24,6 +30,75 @@ FEATURE_BOUNDS = {
     "ShapeFactor3": (0.40, 1.0),
     "ShapeFactor4": (0.94, 1.0),
 }
+
+FEATURE_UNITS = {
+    "Area": "px²",
+    "Perimeter": "px",
+    "MajorAxisLength": "px",
+    "MinorAxisLength": "px",
+    "AspectRation": "unitless ratio",
+    "Eccentricity": "unitless",
+    "ConvexArea": "px²",
+    "EquivDiameter": "px",
+    "Extent": "unitless ratio",
+    "Solidity": "unitless ratio",
+    "roundness": "unitless ratio",
+    "Compactness": "unitless ratio",
+    "ShapeFactor1": "unitless",
+    "ShapeFactor2": "unitless",
+    "ShapeFactor3": "unitless",
+    "ShapeFactor4": "unitless",
+}
+
+
+@st.cache_resource
+def load_model():
+    if not MODEL_PATH.is_file():
+        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+    return joblib.load(MODEL_PATH)
+
+
+def validate_csv_measurements(dataframe):
+    missing_columns = [
+        feature for feature in FEATURE_BOUNDS if feature not in dataframe.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "Missing required columns: " + ", ".join(missing_columns)
+        )
+    if dataframe.empty:
+        raise ValueError("The CSV must contain at least one data row.")
+
+    measurements = dataframe.loc[:, list(FEATURE_BOUNDS)].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    invalid_values = measurements.isna() | ~np.isfinite(measurements)
+    if invalid_values.any().any():
+        invalid_cells = [
+            f"row {row_index + 2}, {column}"
+            for row_index, row in invalid_values.iterrows()
+            for column, is_invalid in row.items()
+            if is_invalid
+        ]
+        raise ValueError(
+            "Values must be numeric and finite. Check "
+            + "; ".join(invalid_cells[:10])
+        )
+
+    out_of_range = []
+    for feature, (lower, upper) in FEATURE_BOUNDS.items():
+        invalid_rows = measurements.index[
+            (measurements[feature] < lower) | (measurements[feature] > upper)
+        ]
+        out_of_range.extend(
+            f"row {row_index + 2}, {feature} (allowed {lower}–{upper})"
+            for row_index in invalid_rows
+        )
+    if out_of_range:
+        raise ValueError("Values outside allowed ranges: " + "; ".join(out_of_range[:10]))
+
+    return measurements
+
 
 st.set_page_config(page_title="Bean Classifier", page_icon="🫘")
 
@@ -186,7 +261,7 @@ with st.form("bean_measurements"):
     for index, (feature, (lower, upper)) in enumerate(FEATURE_BOUNDS.items()):
         with columns[index % 2]:
             values[feature] = st.number_input(
-                feature,
+                f"{feature} ({FEATURE_UNITS[feature]})",
                 min_value=lower,
                 max_value=upper,
                 value=(lower + upper) / 2,
@@ -199,17 +274,69 @@ with st.form("bean_measurements"):
 
 if submitted:
     try:
-        if not MODEL_PATH.is_file():
-            st.error(f"Model file not found: {MODEL_PATH}")
-        else:
-            model = joblib.load(MODEL_PATH)
-
-            measurements = pd.DataFrame([values], columns=FEATURE_BOUNDS.keys())
-            prediction = model.predict(measurements)[0]
-            st.success(f"Predicted class: **{prediction}**")
+        model = load_model()
+        measurements = pd.DataFrame([values], columns=FEATURE_BOUNDS.keys())
+        prediction = model.predict(measurements)[0]
+        st.success(f"Predicted class: **{prediction}**")
 
     except Exception as error:
         st.error(f"Could not load the model or make a prediction: {error}")
+
+st.markdown('<div class="section-heading">Predict a CSV file</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-note">Upload a CSV with one bean per row and all 16 measurement columns. '
+    'Your downloaded file will include a predicted class for each row.</div>',
+    unsafe_allow_html=True,
+)
+with st.expander("View required columns and units"):
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "CSV column": list(FEATURE_UNITS),
+                "Measurement unit": list(FEATURE_UNITS.values()),
+            }
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+
+template = pd.DataFrame(
+    [{feature: (lower + upper) / 2 for feature, (lower, upper) in FEATURE_BOUNDS.items()}]
+)
+st.download_button(
+    "Download CSV template",
+    data=template.to_csv(index=False).encode("utf-8"),
+    file_name="bean_measurements_template.csv",
+    mime="text/csv",
+)
+
+uploaded_csv = st.file_uploader(
+    "Upload measurements CSV", type=["csv"], key="bean_measurements_csv"
+)
+if st.button("Predict uploaded CSV", type="primary", key="predict_csv"):
+    if uploaded_csv is None:
+        st.error("Choose a CSV file before predicting.")
+    else:
+        try:
+            input_dataframe = pd.read_csv(uploaded_csv)
+            csv_measurements = validate_csv_measurements(input_dataframe)
+            batch_predictions = load_model().predict(csv_measurements)
+            output_dataframe = input_dataframe.copy()
+            output_dataframe["PredictedClass"] = batch_predictions
+
+            st.success(f"Predicted {len(output_dataframe)} bean rows.")
+            st.dataframe(output_dataframe, width="stretch")
+            st.download_button(
+                "Download predictions as CSV",
+                data=output_dataframe.to_csv(index=False).encode("utf-8-sig"),
+                file_name="bean_predictions.csv",
+                mime="text/csv",
+                key="download_predictions",
+            )
+        except (pd.errors.ParserError, UnicodeDecodeError, ValueError) as error:
+            st.error(f"Could not process the uploaded CSV: {error}")
+        except Exception as error:
+            st.error(f"Could not load the model or predict the CSV: {error}")
 
 st.markdown(
     '<div class="page-footer">A little science behind every bean 🫘</div>',
